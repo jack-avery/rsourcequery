@@ -28,6 +28,9 @@ pub enum SourceQueryError {
     /// there was a problem reading from the socket.
     #[error("cannot receive response from host")]
     ReceiveError(#[source] std::io::Error),
+    /// Returned if the host is down or behind a firewall.
+    #[error("failed bind port: {0}")]
+    FailedPortBind(#[source] std::io::Error),
     /// Returned if the server did not respond in time.
     #[error("timeout")]
     TimeoutError(#[from] Elapsed),
