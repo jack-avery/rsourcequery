@@ -23,6 +23,7 @@ impl TryInto<PacketHeader> for i32 {
     }
 }
 
+/// For packing a [PacketHeader] into a packet in [RequestPacket::pack].
 impl PacketHeader {
     pub fn to_le_bytes(&self) -> [u8; 4] {
         let type_value: i32 = match self {
@@ -48,7 +49,7 @@ pub enum PacketType {
     Response,
 }
 
-/// Convert an i32 into a [PacketType].
+/// Convert a u8 into a [PacketType].
 impl TryInto<PacketType> for u8 {
     type Error = SourceQueryError;
 
@@ -62,6 +63,7 @@ impl TryInto<PacketType> for u8 {
     }
 }
 
+/// For packing a [PacketType] into a packet in [RequestPacket::pack].
 impl PacketType {
     pub fn to_byte(&self) -> u8 {
         match self {
@@ -76,7 +78,7 @@ impl PacketType {
 /// The only game found violating this is Rust, but we're not using this for Rust... right?
 pub type RawPacket = [u8; 1400];
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct RequestPacket {
     packet_header: PacketHeader,
     packet_type: PacketType,
@@ -96,7 +98,7 @@ impl RequestPacket {
 
     /// Serializes a request packet into an array of bytes.
     pub fn pack(&self) -> Vec<u8> {
-        // packet structure: size, ID, type, body, terminator
+        // packet structure: header, type, body, terminator (and challenge)
         let mut payload: Vec<u8> = Vec::<u8>::new();
         payload.extend_from_slice(&self.packet_header().to_le_bytes());
         payload.extend_from_slice(&[self.packet_type().to_byte()]);
@@ -123,7 +125,7 @@ impl RequestPacket {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ResponsePacket {
     packet_header: PacketHeader,
     id: Option<i32>,
