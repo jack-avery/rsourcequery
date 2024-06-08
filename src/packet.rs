@@ -1,6 +1,4 @@
-use std::{ops::RangeInclusive, str};
-
-use byteorder::{LittleEndian, ReadBytesExt};
+use std::ops::RangeInclusive;
 
 use crate::error::SourceQueryError;
 
@@ -37,14 +35,17 @@ impl PacketHeader {
 #[derive(Debug, PartialEq, Eq)]
 pub enum PacketType {
     /// A2S_INFO Request -- https://developer.valvesoftware.com/wiki/Server_queries#A2S_INFO
+    ///
     /// Retrieves information about the server including, but not limited to:
     /// its name, the map currently being played, and the number of players.
     Request,
     /// S2C_CHALLENGE
+    ///
     /// the server may reply with a challenge to the client using S2C_CHALLENGE
     /// ('A' or 0x41). In that case, the client should repeat the request by appending the challenge number.
     Challenge,
-    /// A2S_INFO Response Packet
+    /// A2S_INFO Response Packet -- https://developer.valvesoftware.com/wiki/Server_queries#A2S_INFO
+    ///
     /// To be parsed by [ServerInfo::parse].
     Response,
 }
@@ -134,7 +135,7 @@ pub struct ResponsePacket {
     size: Option<usize>,
     unpacked_size: Option<u32>,
     packet_type: PacketType,
-    body: Option<Vec<u8>>
+    body: Vec<u8>
 }
 
 impl ResponsePacket {
@@ -164,7 +165,7 @@ impl ResponsePacket {
                 } else {
                     &incoming[Self::SINGLE_BODY_OFFSET..]
                 };
-                let body = Some(raw_body.to_vec());
+                let body = raw_body.to_vec();
                 
                 let packet = ResponsePacket {
                     packet_header,
@@ -180,7 +181,7 @@ impl ResponsePacket {
                 Ok(packet)
             },
             //TODO: handle split response packets
-            PacketHeader::Split => todo!(),
+            PacketHeader::Split => unimplemented!(),
         }
     }
 
@@ -192,112 +193,7 @@ impl ResponsePacket {
         &self.packet_type
     }
 
-    pub fn body(&self) -> Option<Vec<u8>> {
+    pub fn body(&self) -> Vec<u8> {
         self.body.clone()
-    }
-}
-
-#[derive(Debug)]
-pub struct ServerInfo {
-    protocol: u8,
-    hostname: String,
-    map: String,
-    folder: String,
-    game: String,
-    game_id: u16,
-    players: u8,
-    maxplayers: u8,
-    bots: u8,
-    server_type: char,
-    server_env: char,
-    password_protected: bool,
-    vac_enabled: bool
-}
-
-impl ServerInfo {
-    const GAME_ID_OFFSET: RangeInclusive<usize> = 0..=1;
-    const PLAYERS_OFFSET: usize = 2;
-    const MAXPLAYERS_OFFSET: usize = 3;
-    const BOTS_OFFSET: usize = 4;
-    const TYPE_OFFSET: usize = 5;
-    const ENV_OFFSET: usize = 6;
-    const PASSWORD_PROTECTED_OFFSET: usize = 7;
-    const VAC_ENABLED_OFFSET: usize = 8;
-
-    pub fn parse(packet: ResponsePacket) -> Result<ServerInfo, SourceQueryError> {
-        let mut data: Vec<u8> = packet.body.expect("attempting to parse empty packet");
-        let protocol: u8 = data.remove(0);
-        
-        //TODO: improve string handling (resolve offsets?)
-        let mut hostname_buf: Vec<u8> = Vec::new();
-        let mut c: u8;
-        loop {
-            c = data.remove(0);
-            if c == 0 {
-                break;
-            }
-            hostname_buf.push(c);
-        }
-        let hostname: String = str::from_utf8(&hostname_buf)?.to_string();
-
-        let mut map_buf: Vec<u8> = Vec::new();
-        loop {
-            c = data.remove(0);
-            if c == 0 {
-                break;
-            }
-            map_buf.push(c);
-        }
-        let map: String = str::from_utf8(&map_buf)?.to_string();
-
-        let mut folder_buf: Vec<u8> = Vec::new();
-        loop {
-            c = data.remove(0);
-            if c == 0 {
-                break;
-            }
-            folder_buf.push(c);
-        }
-        let folder: String = str::from_utf8(&folder_buf)?.to_string();
-
-        let mut game_buf: Vec<u8> = Vec::new();
-        loop {
-            c = data.remove(0);
-            if c == 0 {
-                break;
-            }
-            game_buf.push(c);
-        }
-        let game: String = str::from_utf8(&game_buf)?.to_string();
-
-        // string handling is done, so we can just make this a slice
-        let data: &[u8] = data.as_slice();
-
-        let mut game_id_pair = &data[Self::GAME_ID_OFFSET];
-        let game_id = game_id_pair.read_u16::<LittleEndian>()
-            .expect("failed to convert [u8; 2] into u16");
-        let players = data[Self::PLAYERS_OFFSET];
-        let maxplayers = data[Self::MAXPLAYERS_OFFSET];
-        let bots = data[Self::BOTS_OFFSET];
-        let server_type = char::from(data[Self::TYPE_OFFSET]);
-        let server_env = char::from(data[Self::ENV_OFFSET]);
-        let password_protected = data[Self::PASSWORD_PROTECTED_OFFSET] == 1;
-        let vac_enabled = data[Self::VAC_ENABLED_OFFSET] == 1;
-
-        Ok(ServerInfo {
-            protocol,
-            hostname,
-            map,
-            folder,
-            game,
-            game_id,
-            players,
-            maxplayers,
-            bots,
-            server_type,
-            server_env,
-            password_protected,
-            vac_enabled
-        })
     }
 }
