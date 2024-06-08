@@ -17,10 +17,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 ## To-Do
 
-[x] Querying
-[x] Single packet response parsing
-[x] Challenge resolution
-[x] Server info parsing
-[x] High-level async `query()`
-[ ] String handling improvement
-[ ] Split packet response parsing
+- [x] Querying
+- [x] Single packet response parsing
+- [x] Challenge resolution
+- [x] Server info parsing
+- [x] High-level async `query()`
+- [ ] String handling improvement
+- [ ] Split packet response parsing
