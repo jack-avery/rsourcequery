@@ -35,7 +35,7 @@ impl PacketHeader {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PacketType {
-    /// A2S_INFO -- https://developer.valvesoftware.com/wiki/Server_queries#A2S_INFO
+    /// A2S_INFO Request -- https://developer.valvesoftware.com/wiki/Server_queries#A2S_INFO
     /// Retrieves information about the server including, but not limited to:
     /// its name, the map currently being played, and the number of players.
     Request,
@@ -43,6 +43,8 @@ pub enum PacketType {
     /// the server may reply with a challenge to the client using S2C_CHALLENGE
     /// ('A' or 0x41). In that case, the client should repeat the request by appending the challenge number.
     Challenge,
+    /// A2S_INFO Response Packet
+    /// To be parsed by [ServerInfo::parse].
     Response,
 }
 
@@ -61,8 +63,6 @@ impl TryInto<PacketType> for u8 {
 }
 
 impl PacketType {
-    /// Valve tells us that the fields in the header of a rcon packet are all
-    /// signed 32-bit integers in low-endian, so we can easily convert like so.
     pub fn to_byte(&self) -> u8 {
         match self {
             PacketType::Request => 84, // 0x54
@@ -74,7 +74,7 @@ impl PacketType {
 
 /// According to the Valve wiki, Source query responses use 1400 bytes + IP/UDP headers.
 /// The only game found violating this is Rust, but we're not using this for Rust... right?
-pub type RawPacket = [u8; 2048];
+pub type RawPacket = [u8; 1400];
 
 #[derive(Debug)]
 pub struct RequestPacket {
@@ -123,7 +123,6 @@ impl RequestPacket {
     }
 }
 
-/// Low level implementation of a rcon packet.
 #[derive(Debug)]
 pub struct ResponsePacket {
     packet_header: PacketHeader,
@@ -157,25 +156,14 @@ impl ResponsePacket {
             PacketHeader::Single => {
                 let raw_type = &incoming[Self::SINGLE_TYPE_OFFSET];
                 let packet_type: PacketType = raw_type.to_owned().try_into()?;
-
-                if packet_type == PacketType::Challenge {
-                    let raw_challenge = &incoming[Self::CHALLENGE_BODY];
-                    let body = Some(raw_challenge.to_vec());
-                    let packet = ResponsePacket {
-                        packet_header,
-                        id: None,
-                        total: None,
-                        number: None,
-                        size: None,
-                        unpacked_size: None,
-                        packet_type,
-                        body
-                    };
-                    return Ok(packet);
-                }
                 
-                let raw_body = &incoming[Self::SINGLE_BODY_OFFSET..];
+                let raw_body = if packet_type == PacketType::Challenge {
+                    &incoming[Self::CHALLENGE_BODY]
+                } else {
+                    &incoming[Self::SINGLE_BODY_OFFSET..]
+                };
                 let body = Some(raw_body.to_vec());
+                
                 let packet = ResponsePacket {
                     packet_header,
                     id: None,
@@ -235,7 +223,7 @@ impl ServerInfo {
     const VAC_ENABLED_OFFSET: usize = 8;
 
     pub fn parse(packet: ResponsePacket) -> Result<ServerInfo, SourceQueryError> {
-        let mut data: Vec<u8> = packet.body.expect("empty packet??????");
+        let mut data: Vec<u8> = packet.body.expect("attempting to parse empty packet");
         let protocol: u8 = data.remove(0);
         
         //TODO: improve string handling (resolve offsets?)
@@ -284,7 +272,8 @@ impl ServerInfo {
         let data: &[u8] = data.as_slice();
 
         let mut game_id_pair = &data[Self::GAME_ID_OFFSET];
-        let game_id = game_id_pair.read_u16::<LittleEndian>().expect("huh??");
+        let game_id = game_id_pair.read_u16::<LittleEndian>()
+            .expect("failed to convert [u8; 2] into u16");
         let players = data[Self::PLAYERS_OFFSET];
         let maxplayers = data[Self::MAXPLAYERS_OFFSET];
         let bots = data[Self::BOTS_OFFSET];
