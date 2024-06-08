@@ -22,6 +22,21 @@ async fn send_recv(sock: &UdpSocket, packet: RequestPacket, timeout_dur: Duratio
     ResponsePacket::unpack(resp_buf)
 }
 
+/// Query `host` with the Source Query Protocol A2S_INFO query.
+/// 
+/// If `timeout_dur` is `Some(Duration)`, each `timeout()` will use `timeout_dur`.
+/// The default is 5 seconds if `timeout_dur` is `None`.
+/// 
+/// Note that this timeout duration can occur 3 times:
+/// - On socket connect
+/// - On packet send
+/// - On packet receive
+/// 
+/// Example usage:
+/// ```
+/// let host: &str = "74.91.123.17:27045"; // Uncletopia | New York City | 4
+/// let info: ServerInfo = query(host, None).await?;
+/// ```
 pub async fn query(host: &str, timeout_dur: Option<Duration>) -> Result<ServerInfo, SourceQueryError> {
     let timeout_dur: Duration = timeout_dur.unwrap_or(Duration::from_secs(5));
 
