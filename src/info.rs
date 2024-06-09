@@ -177,7 +177,11 @@ pub async fn query(host: &str, timeout_dur: Option<Duration>) -> Result<ServerIn
     if packet.packet_type() == &PacketType::Challenge {
         let req_packet: RequestPacket = RequestPacket::new(Some(packet.body()));
         let packet: ResponsePacket = send_recv(&sock, req_packet, timeout_dur).await?;
-        ServerInfo::parse(packet)
+        if packet.packet_type() == &PacketType::Response {
+            ServerInfo::parse(packet)
+        } else {
+            Err(SourceQueryError::FussyHost(host.to_owned()))
+        }
     // no challenge?
     } else {
         ServerInfo::parse(packet)

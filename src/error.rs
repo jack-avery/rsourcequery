@@ -20,6 +20,9 @@ pub enum SourceQueryError {
     /// Returned if the host is down or behind a firewall.
     #[error("host cannot be reached")]
     UnreachableHost(#[source] std::io::Error),
+    /// The host responded with another challenge after resolving a previous challenge.
+    #[error("host ignored to challenge response: {0}")]
+    FussyHost(String),
     /// Internal error used if the stream was successfully established, but
     /// there was a problem writing to the socket.
     #[error("cannot send message to host")]
