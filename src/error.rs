@@ -34,4 +34,7 @@ pub enum SourceQueryError {
     /// Returned if the server did not respond in time.
     #[error("timeout")]
     TimeoutError(#[from] Elapsed),
+    /// Attempting to parse an empty packet
+    #[error("attempt to parse an empty packet")]
+    AttemptParseEmptyPacket(),
 }

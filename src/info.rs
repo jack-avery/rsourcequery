@@ -59,8 +59,11 @@ impl ServerInfo {
     const VAC_ENABLED_OFFSET: usize = 8;
 
     /// Parse a [ResponsePacket] into its' corresponding [ServerInfo].
-    /// This will probably panic if [ResponsePacket] is not [PacketType::Response].
     pub fn parse(packet: ResponsePacket) -> Result<ServerInfo, SourceQueryError> {
+        if packet.packet_type() != &PacketType::Response {
+            return Err(SourceQueryError::AttemptParseEmptyPacket());
+        }
+
         let mut data: Vec<u8> = packet.body();
         let protocol: u8 = data.remove(0);
         
