@@ -7,8 +7,6 @@ use crate::error::SourceQueryError;
 
 use crate::packet::{RequestPacket, ResponsePacket, PacketType};
 
-use std::{ops::RangeInclusive, str};
-
 /// Server information as obtained by [query].
 #[derive(Debug)]
 pub struct ServerInfo {
@@ -49,14 +47,44 @@ pub struct ServerInfo {
 }
 
 impl ServerInfo {
-    const GAME_ID_OFFSET: RangeInclusive<usize> = 0..=1;
-    const PLAYERS_OFFSET: usize = 2;
-    const MAXPLAYERS_OFFSET: usize = 3;
-    const BOTS_OFFSET: usize = 4;
-    const TYPE_OFFSET: usize = 5;
-    const ENV_OFFSET: usize = 6;
-    const PASSWORD_PROTECTED_OFFSET: usize = 7;
-    const VAC_ENABLED_OFFSET: usize = 8;
+    const GAME_ID_SIZE: usize = 2;
+
+    /// Get the value of a null-terminated string
+    /// with index 0 at `offset` in an array of bytes.
+    /// 
+    /// Mutates `offset` to the index after the null-termination byte.
+    fn get_string(data: &[u8], offset: &mut usize) -> Result<String, SourceQueryError> {
+        let start_offset: usize = *offset;
+        let mut end_offset: usize = *offset;
+
+        while let Some(c) = data.get(end_offset) {
+            end_offset += 1;
+            if c == &0u8 {
+                break;
+            }
+        }
+        *offset = end_offset;
+
+        Ok(std::str::from_utf8(&data[start_offset..end_offset])?.to_string())
+    }
+
+    /// Get the byte at index `offset` from a `data`.
+    /// 
+    /// Mutates `offset` to the index after the byte.
+    fn get_byte(data: &[u8], offset: &mut usize) -> u8 {
+        let byte: u8 = data[*offset];
+        *offset += 1;
+        byte
+    }
+
+    /// Get `amount` bytes at index `offset` from `data`.
+    /// 
+    /// Mutates `offset` to the index after the bytes.
+    fn get_bytes(data: &[u8], offset: &mut usize, amount: usize) -> Vec<u8> {
+        let start_offset: usize = *offset;
+        *offset += amount;
+        data[start_offset..*offset].to_vec()
+    }
 
     /// Parse a [ResponsePacket] into its' corresponding [ServerInfo].
     pub fn parse(packet: ResponsePacket) -> Result<ServerInfo, SourceQueryError> {
@@ -64,63 +92,25 @@ impl ServerInfo {
             return Err(SourceQueryError::AttemptParseEmptyPacket());
         }
 
-        let mut data: Vec<u8> = packet.body();
-        let protocol: u8 = data.remove(0);
-        
-        //TODO: improve string handling (resolve offsets?)
-        let mut hostname_buf: Vec<u8> = Vec::new();
-        let mut c: u8;
-        loop {
-            c = data.remove(0);
-            if c == 0 {
-                break;
-            }
-            hostname_buf.push(c);
-        }
-        let hostname: String = str::from_utf8(&hostname_buf)?.to_string();
+        let data: &Vec<u8> = &packet.body();
+        let mut offset: usize = 0;
 
-        let mut map_buf: Vec<u8> = Vec::new();
-        loop {
-            c = data.remove(0);
-            if c == 0 {
-                break;
-            }
-            map_buf.push(c);
-        }
-        let map: String = str::from_utf8(&map_buf)?.to_string();
+        let protocol = Self::get_byte(data, &mut offset);
 
-        let mut folder_buf: Vec<u8> = Vec::new();
-        loop {
-            c = data.remove(0);
-            if c == 0 {
-                break;
-            }
-            folder_buf.push(c);
-        }
-        let folder: String = str::from_utf8(&folder_buf)?.to_string();
+        let hostname: String = Self::get_string(data, &mut offset)?;
+        let map: String = Self::get_string(data, &mut offset)?;
+        let folder: String = Self::get_string(data, &mut offset)?;
+        let game: String = Self::get_string(data, &mut offset)?;
 
-        let mut game_buf: Vec<u8> = Vec::new();
-        loop {
-            c = data.remove(0);
-            if c == 0 {
-                break;
-            }
-            game_buf.push(c);
-        }
-        let game: String = str::from_utf8(&game_buf)?.to_string();
-
-        // string handling is done, so we can just make this a slice
-        let data: &[u8] = data.as_slice();
-
-        let game_id_pair = &data[Self::GAME_ID_OFFSET];
+        let game_id_pair = Self::get_bytes(data, &mut offset, Self::GAME_ID_SIZE);
         let game_id = ((game_id_pair[0] as u16) << 8) | (game_id_pair[1] as u16);
-        let players = data[Self::PLAYERS_OFFSET];
-        let maxplayers = data[Self::MAXPLAYERS_OFFSET];
-        let bots = data[Self::BOTS_OFFSET];
-        let server_type = char::from(data[Self::TYPE_OFFSET]);
-        let server_env = char::from(data[Self::ENV_OFFSET]);
-        let password_protected = data[Self::PASSWORD_PROTECTED_OFFSET] == 1;
-        let vac_enabled = data[Self::VAC_ENABLED_OFFSET] == 1;
+        let players = Self::get_byte(data, &mut offset);
+        let maxplayers = Self::get_byte(data, &mut offset);
+        let bots = Self::get_byte(data, &mut offset);
+        let server_type = char::from(Self::get_byte(data, &mut offset));
+        let server_env = char::from(Self::get_byte(data, &mut offset));
+        let password_protected = Self::get_byte(data, &mut offset) == 1;
+        let vac_enabled = Self::get_byte(data, &mut offset) == 1;
 
         Ok(ServerInfo {
             protocol,
