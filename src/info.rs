@@ -100,23 +100,23 @@ impl ServerInfo {
             true => Some(get_u16(data, &mut offset)),
             false => None,
         };
-        // 0x40 (Server Steam ID)
-        let server_steam_id: Option<u64> = match edf_bitfield[1] {
+        // 0x10 (Server Steam ID)
+        let server_steam_id: Option<u64> = match edf_bitfield[3] {
             true => Some(get_u64(data, &mut offset)),
             false => None
         };
-        // 0x20 (STV Port & Name)
+        // 0x40 (STV Port & Name)
         let stv_port: Option<u16>;
         let stv_name: Option<String>;
-        if edf_bitfield[2] {
+        if edf_bitfield[1] {
             stv_port = Some(get_u16(data, &mut offset));
             stv_name = Some(get_string(data, &mut offset)?);
         } else {
             stv_port = None;
             stv_name = None;
         }
-        // 0x10 (Keywords)
-        let keywords: Option<Vec<String>> = match edf_bitfield[3] {
+        // 0x20 (Keywords)
+        let keywords: Option<Vec<String>> = match edf_bitfield[2] {
             true => Some(
                 get_string(data, &mut offset)?
                     .split(',')
