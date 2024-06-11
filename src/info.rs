@@ -1,5 +1,8 @@
 use std::time::Duration;
 
+use bitvec::prelude::*;
+use bitvec::view::BitView;
+
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
@@ -41,14 +44,26 @@ pub struct ServerInfo {
     /// Is the server password protected?
     pub password_protected: bool,
     /// Is the server VAC enabled?
-    pub vac_enabled: bool
-    //TODO: implement version, EDF (e.g. tags)
-    // these are unimportant to my use case, so... later?
+    pub vac_enabled: bool,
+    /// Version of the game installed on the server
+    pub version: String,
+    /// If present, this specifies which additional data fields will be included.
+    pub edf: u8,
+    /// Server port (EDF 0x80)
+    pub port: Option<u16>,
+    /// Server Steam ID (EDF 0x40)
+    pub server_steam_id: Option<u64>,
+    /// STV Port (EDF 0x20)
+    pub stv_port: Option<u16>,
+    /// STV Name (EDF 0x20)
+    pub stv_name: Option<String>,
+    /// Keywords (EDF 0x10)
+    pub keywords: Option<Vec<String>>,
+    /// Server Game ID (EDF 0x01)
+    pub server_game_id: Option<u64>
 }
 
 impl ServerInfo {
-    const GAME_ID_SIZE: usize = 2;
-
     /// Get the value of a null-terminated string
     /// with index 0 at `offset` in an array of bytes.
     /// 
@@ -65,10 +80,10 @@ impl ServerInfo {
         }
         *offset = end_offset;
 
-        Ok(std::str::from_utf8(&data[start_offset..end_offset])?.to_string())
+        Ok(std::str::from_utf8(&data[start_offset..end_offset-1])?.to_string())
     }
 
-    /// Get the byte at index `offset` from a `data`.
+    /// Get the [u8] at index `offset` from `data`.
     /// 
     /// Mutates `offset` to the index after the byte.
     fn get_byte(data: &[u8], offset: &mut usize) -> u8 {
@@ -77,13 +92,29 @@ impl ServerInfo {
         byte
     }
 
-    /// Get `amount` bytes at index `offset` from `data`.
+    /// Get 2 bytes (as a [u16]) at index `offset` from `data`.
     /// 
     /// Mutates `offset` to the index after the bytes.
-    fn get_bytes(data: &[u8], offset: &mut usize, amount: usize) -> Vec<u8> {
-        let start_offset: usize = *offset;
-        *offset += amount;
-        data[start_offset..*offset].to_vec()
+    fn get_short(data: &[u8], offset: &mut usize) -> u16 {
+        let bytes: &[u8] = &data[*offset..=*offset + 1];
+        *offset += 2;
+        ((bytes[1] as u16) << 8) | (bytes[0] as u16)
+    }
+
+    /// Get 2 bytes (as a [u16]) at index `offset` from `data`.
+    /// 
+    /// Mutates `offset` to the index after the bytes.
+    fn get_long_long(data: &[u8], offset: &mut usize) -> u64 {
+        let bytes: &[u8] = &data[*offset..*offset + 9];
+        *offset += 8;
+        ((bytes[7] as u64) << 56) |
+        ((bytes[6] as u64) << 48) |
+        ((bytes[5] as u64) << 40) |
+        ((bytes[4] as u64) << 32) |
+        ((bytes[3] as u64) << 24) |
+        ((bytes[2] as u64) << 16) |
+        ((bytes[1] as u64) << 8) |
+        (bytes[0] as u64)
     }
 
     /// Parse a [ResponsePacket] into its' corresponding [ServerInfo].
@@ -96,14 +127,11 @@ impl ServerInfo {
         let mut offset: usize = 0;
 
         let protocol = Self::get_byte(data, &mut offset);
-
-        let hostname: String = Self::get_string(data, &mut offset)?;
-        let map: String = Self::get_string(data, &mut offset)?;
-        let folder: String = Self::get_string(data, &mut offset)?;
-        let game: String = Self::get_string(data, &mut offset)?;
-
-        let game_id_pair = Self::get_bytes(data, &mut offset, Self::GAME_ID_SIZE);
-        let game_id = ((game_id_pair[0] as u16) << 8) | (game_id_pair[1] as u16);
+        let hostname = Self::get_string(data, &mut offset)?;
+        let map = Self::get_string(data, &mut offset)?;
+        let folder = Self::get_string(data, &mut offset)?;
+        let game = Self::get_string(data, &mut offset)?;
+        let game_id = Self::get_short(data, &mut offset);
         let players = Self::get_byte(data, &mut offset);
         let maxplayers = Self::get_byte(data, &mut offset);
         let bots = Self::get_byte(data, &mut offset);
@@ -111,6 +139,46 @@ impl ServerInfo {
         let server_env = char::from(Self::get_byte(data, &mut offset));
         let password_protected = Self::get_byte(data, &mut offset) == 1;
         let vac_enabled = Self::get_byte(data, &mut offset) == 1;
+        let version = Self::get_string(data, &mut offset)?;
+
+        let edf = Self::get_byte(data, &mut offset);
+        let edf_bitfield = edf.view_bits::<Msb0>();
+
+        // 0x80 (Port)
+        let port: Option<u16> = match edf_bitfield[0] {
+            true => Some(Self::get_short(data, &mut offset)),
+            false => None,
+        };
+        // 0x40 (Server Steam ID)
+        let server_steam_id: Option<u64> = match edf_bitfield[1] {
+            true => Some(Self::get_long_long(data, &mut offset)),
+            false => None
+        };
+        // 0x20 (STV Port & Name)
+        let stv_port: Option<u16>;
+        let stv_name: Option<String>;
+        if edf_bitfield[2] {
+            stv_port = Some(Self::get_short(data, &mut offset));
+            stv_name = Some(Self::get_string(data, &mut offset)?);
+        } else {
+            stv_port = None;
+            stv_name = None;
+        }
+        // 0x10 (Keywords)
+        let keywords: Option<Vec<String>> = match edf_bitfield[3] {
+            true => Some(
+                Self::get_string(data, &mut offset)?
+                    .split(',')
+                    .map(|k| k.to_owned())
+                    .collect()
+            ),
+            false => None
+        };
+        // 0x01 (GameID)
+        let server_game_id: Option<u64> = match edf_bitfield[7] {
+            true => Some(Self::get_long_long(data, &mut offset)),
+            false => None
+        };
 
         Ok(ServerInfo {
             protocol,
@@ -125,7 +193,15 @@ impl ServerInfo {
             server_type,
             server_env,
             password_protected,
-            vac_enabled
+            vac_enabled,
+            version,
+            edf,
+            port,
+            server_steam_id,
+            stv_port,
+            stv_name,
+            keywords,
+            server_game_id
         })
     }
 }
