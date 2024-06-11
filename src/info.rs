@@ -8,15 +8,8 @@ use tokio::time::timeout;
 
 use crate::error::SourceQueryError;
 
-use crate::packet::{
-    RequestPacket,
-    ResponsePacket,
-    PacketType,
-    get_string,
-    get_u8,
-    get_u16,
-    get_u64
-};
+use crate::packet::{RequestPacket,ResponsePacket,PacketType};
+use crate::parse::{get_string, get_u8, get_u16, get_u64};
 
 /// Default timeout duration if using [`query`] as opposed to [`query_timeout_duration`]
 const DEFAULT_TIMEOUT_SECS: u64 = 5;
