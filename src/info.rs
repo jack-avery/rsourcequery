@@ -174,7 +174,7 @@ impl ServerInfo {
 /// 
 /// https://developer.valvesoftware.com/wiki/Server_queries#A2S_INFO
 pub async fn query(host: &str) -> Result<ServerInfo, SourceQueryError> {
-    _query(host, Duration::from_secs(DEFAULT_TIMEOUT_SECS)).await
+    query_timeout_duration(host, Duration::from_secs(DEFAULT_TIMEOUT_SECS)).await
 }
 
 /// Query `host` with the Source Query Protocol A2S_INFO query,
@@ -194,10 +194,6 @@ pub async fn query(host: &str) -> Result<ServerInfo, SourceQueryError> {
 /// 
 /// https://developer.valvesoftware.com/wiki/Server_queries#A2S_INFO
 pub async fn query_timeout_duration(host: &str, timeout_dur: Duration) -> Result<ServerInfo, SourceQueryError> {
-    _query(host, timeout_dur).await
-}
-
-async fn _query(host: &str, timeout_dur: Duration) -> Result<ServerInfo, SourceQueryError> {
     // just arbitrarily bind any port, doesn't matter really
     let sock: UdpSocket = UdpSocket::bind("0.0.0.0:0")
         .await

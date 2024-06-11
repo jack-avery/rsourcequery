@@ -2,15 +2,26 @@
 
 Pure Rust async implementation of the [Source A2S_INFO Query Protocol](https://developer.valvesoftware.com/wiki/Server_queries#A2S_INFO).
 
+Sample snippet:
 ```rust
-use rsourcequery::info::{ServerInfo, query};
+use rsourcequery::info::{ServerInfo, query, query_timeout_duration};
+use std::time::Duration;
 use tokio::main;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let host: &str = "nyc-1.us.uncletopia.com:27015"; // Uncletopia New York City 1
-    let info: ServerInfo = query(host, None).await?;
+    // Uncletopia New York City 1
+    let host: &str = "nyc-1.us.uncletopia.com:27015";
+
+    // query with a default timeout of 5 seconds
+    let info: ServerInfo = query(host).await?;
     dbg!(info);
+
+    // query with a custom duration
+    let long_duration: Duration = Duration::from_secs(100000);
+    let long_awaited_info: ServerInfo = query_timeout_duration(host, long_duration).await?;
+    dbg!(long_awaited_info);
+    
     Ok(())
 }
 ```
@@ -22,5 +33,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
 - [x] Challenge resolution
 - [x] Server info parsing
 - [x] High-level async `query()`
-- [ ] String handling improvement
+- [x] String handling improvement
 - [ ] Split packet response parsing
