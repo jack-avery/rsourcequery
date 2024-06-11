@@ -86,7 +86,7 @@ impl ServerInfo {
     /// Get the [u8] at index `offset` from `data`.
     /// 
     /// Mutates `offset` to the index after the byte.
-    fn get_byte(data: &[u8], offset: &mut usize) -> u8 {
+    fn get_u8(data: &[u8], offset: &mut usize) -> u8 {
         let byte: u8 = data[*offset];
         *offset += 1;
         byte
@@ -95,16 +95,16 @@ impl ServerInfo {
     /// Get 2 bytes (as a [u16]) at index `offset` from `data`.
     /// 
     /// Mutates `offset` to the index after the bytes.
-    fn get_short(data: &[u8], offset: &mut usize) -> u16 {
+    fn get_u16(data: &[u8], offset: &mut usize) -> u16 {
         let bytes: &[u8] = &data[*offset..=*offset + 1];
         *offset += 2;
         ((bytes[1] as u16) << 8) | (bytes[0] as u16)
     }
 
-    /// Get 2 bytes (as a [u16]) at index `offset` from `data`.
+    /// Get 8 bytes (as a [u64]) at index `offset` from `data`.
     /// 
     /// Mutates `offset` to the index after the bytes.
-    fn get_long_long(data: &[u8], offset: &mut usize) -> u64 {
+    fn get_u64(data: &[u8], offset: &mut usize) -> u64 {
         let bytes: &[u8] = &data[*offset..*offset + 9];
         *offset += 8;
         ((bytes[7] as u64) << 56) |
@@ -126,39 +126,39 @@ impl ServerInfo {
         let data: &Vec<u8> = &packet.body();
         let mut offset: usize = 0;
 
-        let protocol = Self::get_byte(data, &mut offset);
+        let protocol = Self::get_u8(data, &mut offset);
         let hostname = Self::get_string(data, &mut offset)?;
         let map = Self::get_string(data, &mut offset)?;
         let folder = Self::get_string(data, &mut offset)?;
         let game = Self::get_string(data, &mut offset)?;
-        let game_id = Self::get_short(data, &mut offset);
-        let players = Self::get_byte(data, &mut offset);
-        let maxplayers = Self::get_byte(data, &mut offset);
-        let bots = Self::get_byte(data, &mut offset);
-        let server_type = char::from(Self::get_byte(data, &mut offset));
-        let server_env = char::from(Self::get_byte(data, &mut offset));
-        let password_protected = Self::get_byte(data, &mut offset) == 1;
-        let vac_enabled = Self::get_byte(data, &mut offset) == 1;
+        let game_id = Self::get_u16(data, &mut offset);
+        let players = Self::get_u8(data, &mut offset);
+        let maxplayers = Self::get_u8(data, &mut offset);
+        let bots = Self::get_u8(data, &mut offset);
+        let server_type = char::from(Self::get_u8(data, &mut offset));
+        let server_env = char::from(Self::get_u8(data, &mut offset));
+        let password_protected = Self::get_u8(data, &mut offset) == 1;
+        let vac_enabled = Self::get_u8(data, &mut offset) == 1;
         let version = Self::get_string(data, &mut offset)?;
 
-        let edf = Self::get_byte(data, &mut offset);
+        let edf = Self::get_u8(data, &mut offset);
         let edf_bitfield = edf.view_bits::<Msb0>();
 
         // 0x80 (Port)
         let port: Option<u16> = match edf_bitfield[0] {
-            true => Some(Self::get_short(data, &mut offset)),
+            true => Some(Self::get_u16(data, &mut offset)),
             false => None,
         };
         // 0x40 (Server Steam ID)
         let server_steam_id: Option<u64> = match edf_bitfield[1] {
-            true => Some(Self::get_long_long(data, &mut offset)),
+            true => Some(Self::get_u64(data, &mut offset)),
             false => None
         };
         // 0x20 (STV Port & Name)
         let stv_port: Option<u16>;
         let stv_name: Option<String>;
         if edf_bitfield[2] {
-            stv_port = Some(Self::get_short(data, &mut offset));
+            stv_port = Some(Self::get_u16(data, &mut offset));
             stv_name = Some(Self::get_string(data, &mut offset)?);
         } else {
             stv_port = None;
@@ -176,7 +176,7 @@ impl ServerInfo {
         };
         // 0x01 (GameID)
         let server_game_id: Option<u64> = match edf_bitfield[7] {
-            true => Some(Self::get_long_long(data, &mut offset)),
+            true => Some(Self::get_u64(data, &mut offset)),
             false => None
         };
 
